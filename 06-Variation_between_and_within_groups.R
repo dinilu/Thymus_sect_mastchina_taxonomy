@@ -1,24 +1,40 @@
+# ======================================================================
+# Script: 06-Variation_between_and_within_groups.R
+# Purpose: Partition morphological variance within and among genetic groups using hierarchical models (including Bayesian variance components).
+#
+# This script is part of the reproducible analysis accompanying the manuscript.
+# It is intended to be run from the project root directory so that relative paths
+# (e.g. 'data/' and 'outputs/') resolve correctly.
+#
+# Commenting convention:
+# - Section headers are delimited by '=' or '-' rulers.
+# - Short, action-oriented comments precede the code blocks they describe.
+# - Existing code lines are left unmodified; only comment lines are added.
+# ======================================================================
 # =========================
 # 0) Paquetes
 # =========================
 
-require(tidyverse)
+# ----------------------------------------------------------------------
+# Package requirements
+# ----------------------------------------------------------------------
+# Load all R packages required for data import, manipulation, modelling,
+# and figure/table generation.
+library(tidyverse)
 library(openxlsx)
-# library(vegan)
-# library(effectsize)
-# library(performance)
-# library(DHARMa)
 library(brms)
 library(lme4)
 library(permuco)
 library(posterior)
 
+# Ensure reproducible stochastic procedures (e.g. permutations, MCMC).
 set.seed(123)  # reproducibilidad
 
-# =========================
-# 1) Importar Excel
-# =========================
-#### LOAD MORPHOMETRIC DATA  ####
+# ----------------------------------------------------------------------
+# LOAD DATA
+# ----------------------------------------------------------------------
+
+#### LOAD GENETIC GROUPS
 genetic_groups <- "data/genetic groups.xlsx" %>% 
   openxlsx::read.xlsx(2) %>% 
   mutate(genetic_group_k2 = case_match(genetic_group_k2,
@@ -27,23 +43,22 @@ genetic_groups <- "data/genetic groups.xlsx" %>%
   mutate(genetic_group_k5 = str_to_sentence(genetic_group_k5))
 
 
-
-#### LOAD MORPHOMETRIC DATA  ####
+#### LOAD MORPHOMETRIC DATA  
 morph_measures <- "data/Morphometric_measures.xlsx" %>% 
   openxlsx::read.xlsx(2)
 
+# Inspect object structure and summary statistics.
 head(morph_measures)  
 summary(morph_measures)
 
-
+# Combine morphometric and genetic group data
 morph_measures <- morph_measures %>% 
   left_join(genetic_groups) %>% 
   rename(clade_5 = genetic_group_k5) %>% 
   rename(clade_2 = genetic_group_k2)
 
-# Create column with ploidy level
 morph_measures <- morph_measures %>% 
-  mutate(across(c(Population_ID, # Change to factors.
+  mutate(across(c(Population_ID,
                   Individual_ID,
                   Sex, 
                   clade_2,
@@ -52,26 +67,9 @@ morph_measures <- morph_measures %>%
   mutate(ca_log = log(ca))
 
 
-# measures_count <- morph_measures %>% count(clade_5, Population_ID, Individual_ID) %>% arrange(n)
-# 
-# selected_individuals <- measures_count %>% filter(n > 2) %>% pull(Individual_ID)
-# 
-# morph_measures <- morph_measures %>% filter(Individual_ID %in% selected_individuals)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#### BRMS approach
+# ----------------------------------------------------------------------
+# BRMS approach
+# ----------------------------------------------------------------------
 
 priors <- c(
   prior(normal(0, 5), class = "Intercept"),
@@ -93,22 +91,24 @@ b <- brm(
 )
 
 
+# Inspect object structure and summary statistics.
 summary(b)
 summary(b)$fixed
 summary(b)$random
 
-
+# Check model
 plot(b)
 
 pp_check(b, ndraws = 100)
 
+# Extract parameter estimates and variance components.
 vc <- VarCorr(b)
 vc
 
 
+# Extract variance components
 draws <- as_draws_df(b)
 
-# Extract variance components
 var_draws <- draws %>%
   transmute(
     var_clade = `sd_clade_5__Intercept`^2,
@@ -123,7 +123,6 @@ var_draws <- draws %>%
     prop_ind   = var_ind   / var_total,
     prop_res   = var_res   / var_total
   )
-
 
 summary_props <- var_draws %>%
   summarise(
@@ -176,7 +175,6 @@ var_draws %>%
   xlab("Proportion of total variance") +
   ylab("Posterior density")
 
-
 var_draws <- var_draws %>%
   mutate(
     prop_inter = prop_clade + prop_pop,
@@ -197,9 +195,6 @@ var_draws %>%
 
 
 fit_one_clade <- function(dat_clade) {
-  # dat_clade <- morph_measures %>% filter(clade_5 == "Algarve")
-  
-  # Fit model: variance among populations + among individuals within populations
   b_cl <- brm(
     ca ~ 1 + (1 | Population_ID / Individual_ID),
     data = dat_clade,
@@ -215,11 +210,8 @@ fit_one_clade <- function(dat_clade) {
   
   dr <- as_draws_df(b_cl)
   
-  # Extract SD names programmatically (robust to naming order)
   sd_names <- grep("^sd_", names(dr), value = TRUE)
   
-  # Identify population and individual SD columns
-  # Typically: sd_Population_ID__Intercept and sd_Individual_ID:Population_ID__Intercept
   pop_sd <- sd_names[grepl("^sd_Population_ID__Intercept$", sd_names)]
   ind_sd <- sd_names[grepl("^sd_Population_ID:Individual_ID__Intercept$", sd_names)]
   
@@ -228,7 +220,6 @@ fit_one_clade <- function(dat_clade) {
          paste(sd_names, collapse = "\n"))
   }
   
-  # Posterior draws of variance components + proportions
   out <- dr %>%
     transmute(
       var_pop = (.data[[pop_sd]])^2,
@@ -272,147 +263,5 @@ summary_by_clade <- posterior_by_clade %>%
   )
 
 summary_by_clade
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# =========================
-# 2) Preparación de datos
-# =========================
-
-
-
-# Selección de variables florales numéricas
-# Si hay columnas numéricas que NO son florales (p.ej. códigos), exclúyelas manualmente:
-X <- morph_measures %>% select(ca)
-
-
-
-
-##################
-
-
-
-m <- lmer(ca ~ 1 + (1 | clade_5 / Population_ID / Individual_ID), data = morph_measures)
-VarCorr(m)
-
-isSingular(m, tol = 1e-5)
-
-
-vc <- as.data.frame(VarCorr(m))
-
-
-vc$prop <- vc$vcov / sum(vc$vcov)
-vc
-
-confint(m, method = "profile")
-
-confint(m, method = "boot", nsim = 1000)
-
-
-
-
-check_model(m)         # overall diagnostic plots
-check_singularity(m)   # warns about boundary/singular random-effects fits
-
-sim_res <- simulateResiduals(fittedModel = m, n = 1000)
-plot(sim_res)                       # overall diagnostic panel
-testUniformity(sim_res)             # general misspecification
-testDispersion(sim_res)             # over/under-dispersion (more relevant for GLMMs, still informative)
-testOutliers(sim_res)               # outlier test
-
-
-re <- ranef(m, condVar = TRUE)
-
-# QQ plot of random intercepts per grouping level
-for (lvl in names(re)) {
-  qqnorm(re[[lvl]][[1]], main = paste("QQ random effects:", lvl))
-  qqline(re[[lvl]][[1]])
-}
-
-
-
-infl_pop <- influence(m, group = "clade_5")
-plot(infl_pop, which = "cook")
-
-infl_pop <- influence(m, group = "clade_5/Population_ID")
-plot(infl_pop, which = "cook")
-
-
-
-# =========================
-# 3) ANÁLISIS MULTIVARIADO (todas las variables a la vez)
-#    PERMANOVA: varianza entre vs dentro (por permutación)
-# =========================
-# Distancia Euclídea (típica para medidas continuas). Alternativa: "gower" si hay mixtas.
-# Recomendación: estandarizar si están en escalas muy diferentes:
-# X_scaled <- scale(X)
-
-dist_mat <- dist(X,
-                 method = "euclidean")
-
-# permanova <- adonis2(dist_mat ~ clade_5, 
-#                      data = morph_measures,
-#                      permutations = 9999,
-#                      by = "margin")
-
-permanova <- adonis2(dist_mat ~ Population_ID, 
-                     data = morph_measures,
-                     permutations = 999,
-                     by = "margin")
- 
-print(permanova)
-
-# "R2" en adonis2 es la proporción de variación explicada (entre grupos / total).
-# El resto (1 - R2) puede interpretarse como variación residual (dentro de grupos + error).
-
-# =========================
-# 4) VARIACIÓN DENTRO DE GRUPOS (dispersión intragrupo)
-#    betadisper evalúa si los grupos difieren en su dispersión (variación interna)
-# =========================
-# bd <- betadisper(dist_mat,
-#                  group = morph_measures$clade_5, 
-#                  type = "centroid")
-
-bd <- betadisper(dist_mat,
-                 group = morph_measures$Population_ID, 
-                 type = "centroid")
-
-anova_bd <- anova(bd)                 # test permutacional/anova sobre dispersión
-
-perm_bd  <- permutest(bd,
-                      permutations = 9999)
-
-print(anova_bd)
-print(perm_bd)
-
-# Resumen por grupo: distancia media al centroide (medida de variación dentro de grupo)
-disp_por_grupo <- tapply(bd$distances, 
-                         morph_measures$Population_ID, 
-                         mean)
-print(disp_por_grupo)
-
-
-
-TukeyHSD(bd)
-
-
 
 

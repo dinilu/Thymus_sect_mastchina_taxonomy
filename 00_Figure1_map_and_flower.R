@@ -1,60 +1,46 @@
-# Figure 1: study area map + flower schematic
-# This script reads sampling locations and genetic group assignments, builds a publication-quality map
-# of the Western Mediterranean study region, and combines it with a flower schematic into a two-panel figure.
-# Outputs are saved as PDF and PNG in outputs/figures/.
-# Reproducibility notes:
-# - Requires the input Excel files in data/ and an SVG schematic.
-# - Uses UTM zone 30N (EPSG:32630) for mapping and consistent distances.
-# - Colours are chosen to be colour-blind friendly.
+# ======================================================================
+# Script: 00_Figure1_map_and_flower.R
+# Purpose: Generate Figure 1: geographic sampling map of populations by genetic group alongside a floral schema panel.
 #
-# Load required packages
-# - tidyverse: data wrangling + ggplot2
-# - sf: spatial objects and coordinate transforms
-# - rnaturalearth: country boundaries
-# - magick: image handling (used indirectly; kept for compatibility)
+# This script is part of the reproducible analysis accompanying the manuscript.
+# It is intended to be run from the project root directory so that relative paths
+# (e.g. 'data/' and 'outputs/') resolve correctly.
 #
+# Commenting convention:
+# - Section headers are delimited by '=' or '-' rulers.
+# - Short, action-oriented comments precede the code blocks they describe.
+# - Existing code lines are left unmodified; only comment lines are added.
+# ======================================================================
+# ----------------------------------------------------------------------
+# Package requirements
+# ----------------------------------------------------------------------
+# Load all R packages required for data import, manipulation, modelling,
+# and figure/table generation.
 library(tidyverse)
 library(sf)
 library(rnaturalearth)
 library(magick)
 
-# Input data
-# 1) Genetic group assignments (five clades/groups)
-# 2) Population table with coordinates
-# These are joined to associate each sampled population/individual with its genetic group.
-#
-# Read genetic group assignments
-# - Sheet 2 is used.
-# - Group labels are converted to sentence case for consistent plotting/legend labels.
-#
+
+# ----------------------------------------------------------------------
+# LOAD DATA
+# ----------------------------------------------------------------------
+#### LOAD GENETIC DATA  ####
 genetic_groups <- openxlsx::read.xlsx("data/genetic groups.xlsx", 
                                       sheet = 2) %>% 
   mutate(genetic_group_k5 = str_to_sentence(genetic_group_k5))
 
-# Read sampling locations (populations)
-# - Sheet 2 is used.
-# - Joined with genetic group information to retain group labels for each location.
-#
+#### LOAD POPULATIONS DATA  ####
 datos_loc <- openxlsx::read.xlsx("data/Populations.xlsx", 
                                  sheet = 2) %>% 
   right_join(genetic_groups)
 
-# Convert tabular coordinates to an sf point layer
-# - Coordinates are provided as Longitude/Latitude in WGS84 (EPSG:4326).
-#
 aux <- datos_loc %>% 
   sf::st_as_sf(coords = c("Longitude", "Latitude"), 
                crs = 4326)
 
-# Download country boundaries (Natural Earth)
-# - Scale 'large' provides higher-resolution coastlines suitable for figures.
-#
 countries <- rnaturalearth::ne_countries(scale = "large",
                                          returnclass = "sf")
-
-# Filter to the set of countries shown in the study area map
-# - Adjust this list if you need a different geographic extent.
-#
 countries_filtered <- countries %>% 
   filter(name_en %in% c("Spain", 
                         "France", 
@@ -76,10 +62,6 @@ aux <- st_transform(aux,
                                            "Tetraploid")))
 
 
-# Create a simple 'ocean' background polygon
-# - This is a rectangular polygon covering the plotting window.
-# - It is used to provide a subtle blue background for sea areas.
-#
 ocean <- st_polygon(list(cbind(c(seq(-160000, 1060000, len = 100), 
                                  rep(1060000, 100), 
                                  seq(1060000, -160000, len = 100), 
@@ -92,18 +74,10 @@ ocean <- st_polygon(list(cbind(c(seq(-160000, 1060000, len = 100),
   st_as_sf() 
 
 
-# Define a colour-blind friendly palette for genetic groups
-# - Ensure the order matches the factor levels defined above.
-#
-daltonic_selection <- c("#009E73", "#F0E442", "#CC79A7", "#E69F00", "#6388b4")
+clade_colors <- c("#009E73", "#F0E442", "#CC79A7", "#E69F00", "#6388b4")
 
 
-# Build the map panel (Figure 1a)
-# - Base layer: ocean background
-# - Land layer: country polygons
-# - Points: sampling locations coloured/shaped by genetic group
-# - coord_sf limits define the figure extent; adjust to zoom in/out.
-#
+# Construct the plot object.
 final_map <- ggplot(data = countries_filtered) +
   geom_sf(data = ocean, fill = "#8080ff80") +
   geom_sf(fill = "lightgrey", 
@@ -118,35 +92,23 @@ final_map <- ggplot(data = countries_filtered) +
   coord_sf(xlim = c(-110000, 1050000),
            ylim = c(3900000, 4900000),
            expand = FALSE) +
-  scale_shape_manual(values = c("Tetraploid" = 21,  # Círculo lleno
-                                "Algarve" = 22,  # Cuadrado
-                                "Doñana" = 22,  # Cuadrado
-                                "Cádiz" = 22,  # Cuadrado
+  scale_shape_manual(values = c("Tetraploid" = 21, 
+                                "Algarve" = 22, 
+                                "Doñana" = 22,  
+                                "Cádiz" = 22, 
                                 "Hercynian" = 22),
-                     name = "Group") +  # Cuadrado
-  scale_fill_manual(values = daltonic_selection,
+                     name = "Group") +
+
+  scale_fill_manual(values = clade_colors,
                     name = "Group") +
   theme_minimal()
 
-# Render the map in the R graphics device (interactive check).
-#
 final_map
 
 
-# Load the flower schematic (Figure 1b)
-# - The schematic should be an SVG located at data/flower_schema.svg.
-# - Using cowplot keeps the graphic as a grob for arrangement with the map.
-#
 img_flower <- cowplot::ggdraw() +
   cowplot::draw_image("data/flower_schema.svg")
 
-# Combine panels into a single two-column figure
-# Two alternative approaches are included below:
-# - cowplot::plot_grid (commented as an example)
-# - ggpubr::ggarrange (used as the final assignment to final_plot)
-# The final object saved is the one assigned last to 'final_plot'.
-#
-# Example with PNG (for fun, the OP's avatar - I love the raccoon)
 final_plot <- cowplot::plot_grid(final_map,
           img_flower,
           ncol = 2,
@@ -161,20 +123,11 @@ final_plot <- ggpubr::ggarrange(final_map,
                                 labels = c("a", "b"),
                                 widths = c(2, 1.3))
 
-final_plot
-
-# Export figure to disk
-# - Save both PDF (vector) and PNG (raster) versions.
-# - Ensure outputs/figures/ exists before running (or create it).
-#
+# Export figure files in publication-ready formats.
 ggsave("outputs/figures/Figure_1.pdf",
        final_plot,
        width = 7,
        height = 3)
-# Export figure to disk
-# - Save both PDF (vector) and PNG (raster) versions.
-# - Ensure outputs/figures/ exists before running (or create it).
-#
 ggsave("outputs/figures/Figure_1.png",
        final_plot,
        width = 7,

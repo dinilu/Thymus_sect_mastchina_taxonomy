@@ -1,17 +1,35 @@
+# ======================================================================
+# Script: 05_Introgression_induce_morphology.R
+# Purpose: Model associations between genetic ancestry (introgression proportions) and morphological traits using (G)LMMs; export model tables and diagnostics.
+#
+# This script is part of the reproducible analysis accompanying the manuscript.
+# It is intended to be run from the project root directory so that relative paths
+# (e.g. 'data/' and 'outputs/') resolve correctly.
+#
+# Commenting convention:
+# - Section headers are delimited by '=' or '-' rulers.
+# - Short, action-oriented comments precede the code blocks they describe.
+# - Existing code lines are left unmodified; only comment lines are added.
+# ======================================================================
 # Load libraries
+# ----------------------------------------------------------------------
+# Package requirements
+# ----------------------------------------------------------------------
+# Load all R packages required for data import, manipulation, modelling,
+# and figure/table generation.
 library(tidyverse)
 library(openxlsx)
 library(glmmTMB)
 library(sjPlot)
-# library(ggeffects)
 library(bbmle)
-# library(DHARMa)
 
 
+# ----------------------------------------------------------------------
+# Data import and preprocessing
+# ----------------------------------------------------------------------
 # Loading data ------------------------------------------------------------
 
 # Load genetic groups
-
 genetic_groups <- openxlsx::read.xlsx("data/genetic groups.xlsx", 
                                       2) %>% 
   mutate(genetic_group_k2 = case_match(genetic_group_k2,
@@ -23,7 +41,6 @@ genetic_groups <- openxlsx::read.xlsx("data/genetic groups.xlsx",
 
 
 # Load morphological data
-
 morpho_data <- "data/Morphometric_measures.xlsx" %>% 
   read.xlsx(2) %>% 
   group_by(Population_ID, Individual_ID) %>% 
@@ -32,7 +49,6 @@ morpho_data <- "data/Morphometric_measures.xlsx" %>%
 
 
 # Load genetic ancestry data
-
 ancestry <- "data/Ancestry.xlsx" %>% 
   read.xlsx(1) %>% 
   mutate(across(group1:group5, ~.x*100 %>%
@@ -41,17 +57,14 @@ ancestry <- "data/Ancestry.xlsx" %>%
 
 
 # Combine bioclim, soil, introgresion and morphology data
-
 data_df <- morpho_data %>%
   inner_join(ancestry) %>% 
   inner_join(genetic_groups) %>%
   dplyr::select(-stooth) %>% 
-  # na.omit() %>% 
   mutate(Sex = as.factor(Sex))
 
 
 # Define groups of variables
-
 morpho_vars <- c("co", "ca", "ltooth", "hair", "d_infl", "prop_ltooth")
 
 intro_vars <- paste0("group", c(3, 5, 4, 2, 1))
@@ -60,7 +73,6 @@ clades <- c("Algarve", "Cádiz", "Doñana", "Hercynian", "Tetraploid")
 
 
 # Exploratory plots
-
 test <- data_df %>%
   pivot_longer(cols = all_of(morpho_vars), 
                names_to = "morpho_var",
@@ -69,6 +81,7 @@ test <- data_df %>%
                names_to = "ind_var",
                values_to = "ind_value")
 
+# Construct the plot object.
 ggplot(test,
        aes(y = morpho_value, 
            x = ind_value, 
@@ -79,14 +92,8 @@ ggplot(test,
              scales = "free")
   
 
-
-
 fit_gg_models <- function(n, clades, indep_vars, dat, dep_var){
-  # n <- 1
-  # indep_vars <- intro_vars
-  # dat <- data_df
-  # dep_var <- morpho_vars[1]
-  
+
   cl <- clades[n]
   
   indep_vars <- indep_vars[-n]
@@ -215,19 +222,17 @@ invisible(
 
 
 
+# ----------------------------------------------------------------------
+# UNIVARIATE MODELS
+# ----------------------------------------------------------------------
 #### UNIVARIATE MODELS ####
 
 fit_gg_single_models <- function(n, indep_vars, dat, dep_var){
-  # n <- 1
-  # indep_vars <- intro_vars
-  # dat <- data_df
-  # dep_var <- morpho_vars
-  
+
   clades <- c("Algarve", "Cádiz", "Doñana", "Hercynian", "Tetraploid")
   
   cl <- clades[n]
-  # indep_vars <- indep_vars[-n]
-  
+
   d_cl <- dat %>% 
     filter(clade_5 == cl)
   
@@ -473,9 +478,11 @@ qq_plot_model <- function(model, name,
   res <- if (is_glmm) residuals(model, type = "pearson") else residuals(model)
   
   file <- file.path(out_dir, paste0("QQ_", name, ".png"))
+# Export figure(s) to file.
   png(file, width = 2000, height = 2000, res = 300)
   qqnorm(res, main = paste("Q–Q plot:", name))
   qqline(res, col = "red")
+# Export figure(s) to file.
   dev.off()
 }
 
@@ -498,20 +505,14 @@ intro_vars <- paste0("group", c(3, 5, 4, 2, 1))
 
 invisible(
   lapply(names(gg_single_mods), function(trait) {
-    trait_list <- gg_single_mods[[trait]]        # e.g. ca_gg_single_mods
+    trait_list <- gg_single_mods[[trait]]        
     
-    lapply(names(trait_list), function(clade) {  # e.g. "Algarve", "Cádiz", ...
-      clade_list <- trait_list[[clade]]          # length 5: one per genetic group
+    lapply(names(trait_list), function(clade) {  
+      clade_list <- trait_list[[clade]]          
       
       lapply(seq_along(clade_list), function(g_idx) {
         group_name <- intro_vars[g_idx]
         mod_set    <- clade_list[[g_idx]]
-        
-        # mod_set structure:
-        # [[1]] = glmmTMB univariate, no Sex random effect
-        # [[2]] = glmmTMB univariate, + (1 | Sex)
-        # [[3]] = AIC comparison
-        # [[4]] = lm univariate
         
         # glmmTMB with Sex random effect
         qq_plot_model(

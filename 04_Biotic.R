@@ -1,4 +1,21 @@
+# ======================================================================
+# Script: 04_Biotic.R
+# Purpose: Analyse biotic community composition (relevé data) across populations and genetic groups; compute distances and ordinations.#
+# This script is part of the reproducible analysis accompanying the manuscript.
+# It is intended to be run from the project root directory so that relative paths
+# (e.g. 'data/' and 'outputs/') resolve correctly.
+#
+# Commenting convention:
+# - Section headers are delimited by '=' or '-' rulers.
+# - Short, action-oriented comments precede the code blocks they describe.
+# - Existing code lines are left unmodified; only comment lines are added.
+# ======================================================================
 
+# ----------------------------------------------------------------------
+# Package requirements
+# ----------------------------------------------------------------------
+# Load all R packages required for data import, manipulation, modelling,
+# and figure/table generation.
 library(tidyverse)
 library(vegan)
 
@@ -89,7 +106,7 @@ releve_df <- releve_df %>%
     stringr::str_detect(species, "FRUTO LARGO"),
     "[No determinado]",
     species)) %>% 
-  dplyr::mutate(species = dplyr::if_else( # Combine "Hojarasca *" under the same class "Hojarasca".
+  dplyr::mutate(species = dplyr::if_else
     stringr::str_detect(species, "Hojarasca"),
     stringr::str_extract(species, "Hojarasca"),
     species)) %>% 
@@ -99,7 +116,7 @@ releve_df <- releve_df %>%
     species)) %>% 
   dplyr::group_by(Population_ID, releve, species) %>% 
   dplyr::summarize(cover = sum(cover)) %>% 
-  dplyr::mutate(cover = dplyr::if_else( # Limit cover to 100 in Hojarasca
+  dplyr::mutate(cover = dplyr::if_else( 
     cover > 100,
     100, 
     cover
@@ -110,8 +127,7 @@ releve_df <- releve_df %>%
 # 
 # releve_df %>% filter(species == "Hojarasca Pino")
 
-# Fill data for species not found in relevés 
-releve_df <- releve_df %>% 
+# Fill data for species not found in relevésreleve_df <- releve_df %>% 
   tidyr::pivot_wider(id_cols = c("Population_ID", "releve"),
                      names_from = species,
                      values_from = cover,
@@ -140,9 +156,7 @@ population_cm_substrate <- population_cm %>%
            "Bloque", "Piedra", "Grava", "Arena", "Arcilla",
            "Madera", "Madera pino", "Humus", "Hojarasca", 
            "Excrementos", "Cenizas")) %>% 
-  # Remove species presence in less than 2 populations
-  # mutate(across(everything(), ~ ifelse(. > 0, 1, 0))) %>% 
-  # select(where(~ sum(.x) >= 5)) %>% 
+  # Remove species presence in less than 5 populations
   select(where(~ sum(ifelse(. > 0, 1, 0)) >= 5))
 
 # Select species variables
@@ -151,12 +165,8 @@ population_cm_species <- population_cm %>%
             "Bloque", "Piedra", "Grava", "Arena", "Arcilla",
             "Madera", "Madera pino", "Humus", "Hojarasca", 
             "Excrementos", "Cenizas")) %>%
-  # Remove species presence in less than 2 populations
-  # mutate(across(everything(), ~ ifelse(. > 0, 1, 0))) %>% 
-  # select(where(~ sum(.x) >= 5)) %>% 
+  # Remove species presence in less than 5 populations
   select(where(~ sum(ifelse(. > 0, 1, 0)) >= 5)) %>%
-  # Apply quadratic transformation to reduce weight of more frequent species
-  # mutate(across(everything(), ~sqrt(.))) %>% 
   # Apply the hellinger transformation instead to see if something improve
   decostand(method = "hellinger") %>% 
   # Get back population names
@@ -173,18 +183,8 @@ population_substrate_dist <- population_cm_substrate %>%
 
 # PCoA 
 run_pcoa <- function(dist, plot_gg, plot_pl, width = 7, height = 7) {
-  # dist <- population_substrate_dist
-  # plot_gg <- "outputs/figures/ordination_substrate_genetic_groups.pdf"
-  # plot_pl <- "outputs/figures/ordination_substrate_ploidy.pdf"
-  # width <- 7
-  # height <- 7
-  # pcoa <- cmdscale(dist, k = 2, eig = TRUE)
   pcoa <- ape::pcoa(dist)
   
-  # Create data.frame with the first two axis of PCoA
-  # df_pcoa <- data.frame(axis1 = pcoa$points[,1],
-  #                       axis2 = pcoa$points[,2], 
-  #                       Population_ID = rownames(pcoa$points)) %>% 
   df_pcoa <- data.frame(axis1 = pcoa$vectors[,1],
                         axis2 = pcoa$vectors[,2], 
                         Population_ID = rownames(pcoa$vectors)) %>% 
@@ -210,33 +210,38 @@ run_pcoa <- function(dist, plot_gg, plot_pl, width = 7, height = 7) {
   
   
   # Draw biplot for genetic groups
-  
   plot1 <- ggplot(df_pcoa, 
                   aes(x = axis1, 
                       y = axis2, 
                       color = clade_5,
                       fill = clade_5)) +
+    # Add layers and styling to the plot.
     geom_point(alpha = 0.3,
                aes(shape = clade_5)) +  # Puntos de cada parcela
+    # Add layers and styling to the plot.
     geom_polygon(data = gg_hull, 
                  alpha = 0.05) + 
+    # Add layers and styling to the plot.
     geom_point(data = df_pcoa %>% group_by(clade_5) %>% 
-               summarize(axis1 = mean(axis1),
-                         axis2 = mean(axis2)),
+                 summarize(axis1 = mean(axis1),
+                           axis2 = mean(axis2)),
                aes(shape = clade_5),
                size = 5) +
+    # Add layers and styling to the plot.
     scale_colour_manual(values =  c(Algarve = "#009E73", 
                                     Cádiz = "#F0E442", 
                                     Doñana = "#CC79A7",
                                     Hercynian = "#E69F00", 
                                     Tetraploid = "#6388b4"
-                        )) + 
+    )) + 
+    # Add layers and styling to the plot.
     scale_fill_manual(values =  c(Algarve = "#009E73", 
                                   Cádiz = "#F0E442", 
                                   Doñana = "#CC79A7",
                                   Hercynian = "#E69F00", 
                                   Tetraploid = "#6388b4"
-                      )) +
+    )) +
+    # Add layers and styling to the plot.
     scale_shape_manual(values = c(Tetraploid = 22,  # cuadrado
                                   Cádiz = 21,    # círculo
                                   Doñana = 21,
@@ -252,12 +257,14 @@ run_pcoa <- function(dist, plot_gg, plot_pl, width = 7, height = 7) {
                             100 * pcoa$values[2, 2]),
                     "%)"),
          color = "Contribution") +
+    # Add layers and styling to the plot.
     theme_bw() +
     # theme(legend.position = "none") +
     guides(color = guide_legend(title="Group"),
            shape = guide_legend(title="Group"),
            fill = guide_legend(title="Group"))
   
+  # Export figure files in publication-ready formats.
   ggsave(plot_gg, plot1, width = width, height = height)
   
   
@@ -275,23 +282,30 @@ run_pcoa <- function(dist, plot_gg, plot_pl, width = 7, height = 7) {
                       y = axis2, 
                       color = clade_2, 
                       fill = clade_2)) +
+    # Add layers and styling to the plot.
     geom_point(alpha = 0.3,
                aes(shape = clade_2)) +  # Puntos de cada parcela
+    # Add layers and styling to the plot.
     geom_polygon(data = pl_hull, 
                  alpha = 0.05) + 
+    # Add layers and styling to the plot.
     geom_point(data = df_pcoa %>% group_by(clade_2) %>% 
                  summarize(axis1 = mean(axis1),
                            axis2 = mean(axis2)),
                aes(shape = clade_2),
                size = 5) +
+    # Add layers and styling to the plot.
     scale_colour_manual(values =  c("2x" = "#ffae34",
                                     "4x" = "#6388b4"
-                        )) + 
+    )) + 
+    # Add layers and styling to the plot.
     scale_fill_manual(values =  c("2x" = "#ffae34",
                                   "4x" = "#6388b4"
-                      )) +
+    )) +
+    # Add layers and styling to the plot.
     scale_shape_manual(values = c("2x" = 21,
                                   "4x" = 22)) +
+    # Add layers and styling to the plot.
     theme_bw() +
     labs(x = paste0("PCoA axis 1 (",
                     sprintf("%.1f",
@@ -305,8 +319,9 @@ run_pcoa <- function(dist, plot_gg, plot_pl, width = 7, height = 7) {
     guides(color = guide_legend(title="Ploidy"),
            shape = guide_legend(title="Ploidy"),
            fill = guide_legend(title="Ploidy"))
-    # theme(legend.position = "bottom") + 
-    
+  # theme(legend.position = "bottom") + 
+  
+  # Export figure files in publication-ready formats.
   ggsave(plot_pl, plot2, width = width, height = height)
   return(list(pcoa = pcoa, 
               df_pcoa = df_pcoa, 
@@ -336,6 +351,9 @@ population_pcoa <- run_pcoa(population_dist,
 
 # Analysis with companion species -----------------------------------------
 
+# ----------------------------------------------------------------------
+# WITH COMPANION SPECIES
+# ----------------------------------------------------------------------
 #### WITH COMPANION SPECIES
 
 # Read data for each file in a list format
@@ -396,18 +414,14 @@ relcom_cm_species <- relcom_cm %>%
             "Bloque", "Piedra", "Grava", "Arena", "Arcilla",
             "Madera", "Madera pino", "Humus", "Hojarasca", 
             "Excrementos", "Cenizas")) %>%
-  # Remove species presence in less than 2 populations
+  # Remove species presence in less than 5 populations
   select(where(~ sum(ifelse(. > 0, 1, 0)) >= 5)) %>%
-  # mutate(across(everything(), ~ ifelse(. > 0, 1, 0))) %>% 
-  # select(where(~ sum(.x) >= 5)) %>% 
-  # Aplica transformación cuadrática para reducir efecto de especies más frecuentes
-  # mutate(across(everything(), ~sqrt(.))) %>% 
+# # Aplica transformation cuadrática for reducir efecto of especies más frecuentes  # mutate(across(everything(), ~sqrt(.))) %>% 
   # Apply the hellinger transformation instead to see if something improve
   decostand(method = "hellinger") %>% 
   # Get back population names
   mutate(Population_ID = relcom_cm$Population_ID) %>% 
   select(Population_ID, everything()) 
-
 
 relcom_dist <- relcom_cm_species %>% 
   column_to_rownames(var = "Population_ID") %>% 
@@ -423,6 +437,7 @@ fig_6 <- ggpubr::ggarrange(population_companion_pcoa[["pl_plot"]],
 
 fig_6
 
+# Export figure files in publication-ready formats.
 ggsave("outputs/figures/Figure_6.pdf", 
        fig_6,
        width = 9,
@@ -431,8 +446,6 @@ ggsave("outputs/figures/Figure_6.png",
        fig_6,
        width = 9,
        height = 3)
-
-
 
 
 
@@ -446,63 +459,6 @@ relcom_gg <- relcom_cm_species %>%
 
 ifelse(relcom_gg[,-1] > 0, 1, 0)
 
-
 ifelse(relcom_gg[,-1] > 0, 1, 0) %>% 
   apply(MARGIN = 1, FUN = sum) %>% 
   setNames(relcom_gg$clade_5)
-
-
-
-
-# Species indicator analysis ----------------------------------------------
-
-## Load library
-library(indicspecies)
-
-# Calculate IndVal to find indicative species
-indval <- population_cm_species %>% 
-  column_to_rownames(var = "Population_ID") %>% 
-  multipatt(population_pcoa$df_pcoa$clade_5, 
-            func = "IndVal.g", 
-            control = how(nperm = 999))
-
-# Ver especies con significancia estadística (p < 0.05)
-summary(indval)
-
-
-# Calcular IndVal para encontrar especies indicadoras
-indval <- population_cm_species %>% 
-  column_to_rownames(var = "Population_ID") %>% 
-  multipatt(population_pcoa$df_pcoa$clade_2, 
-            func = "IndVal.g", 
-            control = how(nperm = 999))
-
-# Ver especies con significancia estadística (p < 0.05)
-summary(indval)
-
-
-
-
-
-
-# Calcular IndVal para encontrar especies indicadoras
-indval <- relcom_cm_species %>% 
-  column_to_rownames(var = "Population_ID") %>% 
-  multipatt(population_companion_pcoa$df_pcoa$clade_5, 
-            func = "IndVal.g", 
-            control = how(nperm = 999))
-
-# Ver especies con significancia estadística (p < 0.05)
-summary(indval)
-
-
-# Calcular IndVal para encontrar especies indicadoras
-indval <- relcom_cm_species %>% 
-  column_to_rownames(var = "Population_ID") %>% 
-  multipatt(population_companion_pcoa$df_pcoa$clade_2, 
-            func = "IndVal.g", 
-            control = how(nperm = 999))
-
-# Ver especies con significancia estadística (p < 0.05)
-summary(indval)
-

@@ -1,17 +1,36 @@
+# ======================================================================
+# Script: 03_Abiotic.R
+# Purpose: Analyse abiotic (soil) variables across genetic groups and ploidy levels; generate Figure 4 and ordination outputs.
+#
+# This script is part of the reproducible analysis accompanying the manuscript.
+# It is intended to be run from the project root directory so that relative paths
+# (e.g. 'data/' and 'outputs/') resolve correctly.
+#
+# Commenting convention:
+# - Section headers are delimited by '=' or '-' rulers.
+# - Short, action-oriented comments precede the code blocks they describe.
+# - Existing code lines are left unmodified; only comment lines are added.
+# ======================================================================
 # Load libraries
+# ----------------------------------------------------------------------
+# Package requirements
+# ----------------------------------------------------------------------
+# Load all R packages required for data import, manipulation, modelling,
+# and figure/table generation.
 library(tidyverse)
 library(ggpubr)
 library(factoextra)
 library(FSA)
 library(reshape2)
 library(introdataviz)
-# library(car)
-# library(corrplot)
 
 
+# ----------------------------------------------------------------------
+# Data import and preprocessing
+# ----------------------------------------------------------------------
 # Loading data ------------------------------------------------------------
 
-# Load populations data
+# Load genetic group data
 
 pops_data <- "data/genetic groups.xlsx" %>% 
   openxlsx::read.xlsx(2) %>% 
@@ -33,15 +52,14 @@ pops_data <- "data/genetic groups.xlsx" %>%
 
 
 # Load soil data
-
 soil_vars <- c("pH", "EC", "OM", "WRP", "WRC")
 
 soil_data <- "data/Soil_samples.xlsx" %>%  
   openxlsx::read.xlsx(2) %>%  
-  filter(Sample_location == "b") %>% # Keep only individuals below thymus individuals
+  filter(Sample_location == "b") %>% 
   mutate(Population_ID = as.factor(Population_ID)) %>% 
   left_join(pops_data) %>% 
-  mutate(across(pH:WRC, log)) # Log transformation of the soil data
+  mutate(across(pH:WRC, log)) 
 
 
 # Check for the total number of data in each population
@@ -53,13 +71,8 @@ test
 
 # Soil analysis -----------------------------------------------------------
 
-
 # Compare significance between groups 
-
 extract_differences_from_dunnTest <- function(var, group_var, data){
-  # var <- "ph"
-  # group_var <- "clade_5"
-  # data <- soil_data
   form <- as.formula(paste0(var, " ~ ", group_var))
   post_hoc_clade <- dunnTest(form,
                              data = data,
@@ -71,7 +84,6 @@ extract_differences_from_dunnTest <- function(var, group_var, data){
     clade_cld <- rcompanion::cldList(comparison = post_hoc_clade_res$Comparison,
                                      p.value = post_hoc_clade_res$P.adj,
                                      threshold = 0.05)[1:2]
-    # names(clade_cld)[1] <- "Group"
     clade_cld
   } else {
     post_hoc_clade_res
@@ -87,7 +99,9 @@ soil_ploidy_diff_letters <- lapply(soil_vars,
                                   "clade_2", 
                                   soil_data)
 
-names(soil_clade_diff_letters) <- names(soil_ploidy_diff_letters) <- soil_vars
+names(soil_clade_diff_letters) <- 
+  names(soil_ploidy_diff_letters) <- 
+  soil_vars
 
 
 soil_clade_diff_letters <- soil_clade_diff_letters %>% 
@@ -139,6 +153,9 @@ soil_ploidy_diff_letters <- soil_ploidy_diff_letters %>%
 
 
 
+# ----------------------------------------------------------------------
+# Figures
+# ----------------------------------------------------------------------
 #### Figures ####
 
 # Define colors for all plots
@@ -154,7 +171,6 @@ ploidy_colors <- c("2x" = "#E69F00", # 2x
 
 
 # Prepare final data for plotting
-
 soil_data_lf <- soil_data %>%
   select(Population_ID, Sample_ID, clade_2, clade_5, all_of(soil_vars)) %>% 
   pivot_longer(cols = all_of(soil_vars)) %>% 
@@ -183,12 +199,8 @@ soil_longer_data <- soil_ploidy_lf %>%
                                        "Tetraploid")))
 
 
-
-
-# Crear figura combinada
+# Create combined fiture 
 fig_4 <- ggplot(soil_longer_data) +
-
-  # Splitted violin plots (diploid vs tetraploid)
   introdataviz::geom_split_violin(data = soil_longer_data %>% 
                                     filter(taxa_treatment == "Ploidy"),
                                   aes(x = "2x vs 4x", 
@@ -196,7 +208,6 @@ fig_4 <- ggplot(soil_longer_data) +
                                       fill = taxa_name),
                                   alpha = 0.4, 
                                   trim = FALSE) +
-  # Boxplots
   geom_boxplot(data = soil_longer_data %>%
                  filter(taxa_treatment == "Ploidy"),
                aes(x = "2x vs 4x",
@@ -205,7 +216,6 @@ fig_4 <- ggplot(soil_longer_data) +
                width = 0.15, 
                alpha = 0.6,
                position = position_dodge(0.15)) +
-  # Add average values
   stat_summary(
     data = soil_longer_data %>%
       filter(taxa_treatment == "Ploidy"),
@@ -217,9 +227,6 @@ fig_4 <- ggplot(soil_longer_data) +
     color = "black",
     position = position_dodge(0.15),
     size = 1.2) +
-  
-  
-  # Violin plots (genetic groups)
   geom_violin(data = soil_longer_data %>% 
                 filter(taxa_treatment == "Group"), 
               aes(x = taxa_name, 
@@ -243,7 +250,6 @@ fig_4 <- ggplot(soil_longer_data) +
     color = "black",
     position = position_dodge(0.9),
     size = 1.2) +
-  
   geom_text(data = soil_clade_diff_letters,
             aes(x = taxa_name,
                 label = label),
@@ -255,7 +261,6 @@ fig_4 <- ggplot(soil_longer_data) +
             y = Inf,
             vjust = 1.2,
             size = 5) +
-
   facet_grid(name ~ taxa_treatment,
              scales = "free",
              labeller = labeller(
@@ -276,6 +281,7 @@ fig_4 <- ggplot(soil_longer_data) +
 fig_4
 
 
+# Export figure files in publication-ready formats.
 ggsave("outputs/figures/Figure_4.pdf",
        fig_4,
        width = 7,
@@ -285,16 +291,11 @@ ggsave("outputs/figures/Figure_4.png",
        width = 7,
        height = 7.5)
 
-
-
-
 # Plot multivariate ordination based on soil variables
-
 soil_pca_data <- soil_data %>% 
   select(-Comments) %>% 
   na.omit() %>% 
   mutate(shape_group = ifelse(clade_5 == "Tetraploid", 22, 21))
-
 
 soil_pca <- soil_pca_data %>% 
   select(all_of(soil_vars)) %>% 
@@ -303,7 +304,6 @@ soil_pca <- soil_pca_data %>%
 soil_pca_summary <- soil_pca %>% 
   summary() %>% 
   .$importance
-
 
 # Screeplot 
 fig_S5_a <- fviz_screeplot(soil_pca,
@@ -345,9 +345,9 @@ fig_S5_c <- fviz_pca_ind(soil_pca,
                 ellipse.type = "convex",
                 ellipse.alpha = 0.05, 
                 title = "",
-                shape.ind = soil_pca_data$clade_2, # forma de puntos según grupo
-                col.ind = soil_pca_data$clade_2,      # borde
-                fill.ind = soil_pca_data$clade_2,     # relleno
+                shape.ind = soil_pca_data$clade_2,
+                col.ind = soil_pca_data$clade_2,  
+                fill.ind = soil_pca_data$clade_2, 
                 mean.point.size = 5,
                 alpha.ind = 0.3) +
   theme_bw() + 
@@ -356,8 +356,8 @@ fig_S5_c <- fviz_pca_ind(soil_pca,
          fill = guide_legend(title="Taxa")) +
   scale_color_manual(values = ploidy_colors) +
   scale_fill_manual(values = ploidy_colors) +
-  scale_shape_manual(values = c("4x" = 22,  # cuadrado
-                                "2x" = 21)) +   # círculo
+  scale_shape_manual(values = c("4x" = 22, 
+                                "2x" = 21)) +   
   theme(legend.position = "none") +
   labs(x = paste0("Principal Component 1 (",
                   sprintf("%.1f",
@@ -373,22 +373,21 @@ fig_S5_c
 
 
 # PCA among genetic groups
-
 fig_S5_d <- fviz_pca_ind(soil_pca, 
-                         label = "var",  # mostrar etiquetas variables
+                         label = "var", 
                          geom = "point",
-                         habillage = soil_pca_data$clade_5,   # colores por grupo
+                         habillage = soil_pca_data$clade_5,  
                          addEllipses = TRUE,
-                         ellipse.type = "convex",  # área convex hull en vez de elipse normal
+                         ellipse.type = "convex", 
                          ellipse.alpha = 0.05,
                          title = "",
-                         shape.ind = soil_pca_data$clade_5, # forma de puntos según grupo
-                         col.ind = soil_pca_data$clade_5,      # borde
-                         fill.ind = soil_pca_data$clade_5,     # relleno
+                         shape.ind = soil_pca_data$clade_5,
+                         col.ind = soil_pca_data$clade_5,  
+                         fill.ind = soil_pca_data$clade_5, 
                          mean.point.size = 5,
                          alpha.ind = 0.3) +
-  scale_shape_manual(values = c("Tetraploid" = 22,  # cuadrado
-                                "Cádiz" = 21,    # círculo
+  scale_shape_manual(values = c("Tetraploid" = 22,
+                                "Cádiz" = 21,    
                                 "Doñana" = 21,
                                 "Algarve" = 21,
                                 "Hercynian" = 21
@@ -423,6 +422,7 @@ fig_S5 <- ggpubr::ggarrange(fig_S5_a,
 
 fig_S5
 
+# Export figure files in publication-ready formats.
 ggsave("outputs/figures/Figure_S5.pdf", 
        fig_S5,
        width = 7, 
@@ -436,7 +436,6 @@ ggsave("outputs/figures/Figure_S5.png",
 
 # Bioclim analysis --------------------------------------------------------
 
-
 # Load bioclimatic Chelsa data
 
 # Load presaved version of the bioclimatic data
@@ -444,23 +443,18 @@ bioclim_vars <- c(c("ai"),
                   paste0("bio", 1:19), 
                   c("cmi_mean"),
                   c("gdd5"),
-                  # c("gsp", "gst"),
-                  # c("hurs_max"),
                   c("sfcWind_mean"))
 
 bioclim_data <- "data/Abiotic_population_means.xlsx" %>% 
   openxlsx::read.xlsx("climate") %>% 
-  select(c(Population_ID, all_of(bioclim_vars))) %>% # Keep only individuals below thymus individuals
+  select(c(Population_ID, all_of(bioclim_vars))) %>% 
   mutate(Population_ID = as.factor(Population_ID)) %>% 
   left_join(pops_data)
 
 
-
 # Compare significance between groups 
 
-
 # Plot differences for bioclim variables
-
 bioclim_pca_data <- bioclim_data %>%
   select(all_of(bioclim_vars))
 
@@ -543,7 +537,6 @@ bioclim_ploidy_diff_letters <- bioclim_ploidy_diff_letters %>%
 
 
 # Prepare final data for plotting
-
 bioclim_data_lf <- bioclim_data %>%
   select(Population_ID, clade_2, clade_5, all_of(bioclim_pca_vars)) %>% 
   pivot_longer(cols = all_of(bioclim_pca_vars)) %>% 
@@ -572,11 +565,8 @@ bioclim_longer_data <- bioclim_ploidy_lf %>%
                                        "Tetraploid")))
 
 
-
 # Create plot
 fig_5 <- ggplot(bioclim_longer_data) +
-  
-  # Splitted violin plots (diploid vs tetraploid)
   introdataviz::geom_split_violin(data = bioclim_longer_data %>% 
                                     filter(taxa_treatment == "Ploidy"),
                                   aes(x = "2x vs 4x", 
@@ -584,7 +574,6 @@ fig_5 <- ggplot(bioclim_longer_data) +
                                       fill = taxa_name),
                                   alpha = 0.4, 
                                   trim = FALSE) +
-  # Boxplots
   geom_boxplot(data = bioclim_longer_data %>%
                  filter(taxa_treatment == "Ploidy"),
                aes(x = "2x vs 4x",
@@ -593,7 +582,6 @@ fig_5 <- ggplot(bioclim_longer_data) +
                width = 0.15, 
                alpha = 0.6,
                position = position_dodge(0.15)) +
-  # Add average values
   stat_summary(
     data = bioclim_longer_data %>%
       filter(taxa_treatment == "Ploidy"),
@@ -604,11 +592,7 @@ fig_5 <- ggplot(bioclim_longer_data) +
     geom = "point",
     color = "black",
     position = position_dodge(0.15),
-    size = 1.2
-  ) +
-  
-  
-  # Violin plots (genetic groups)
+    size = 1.2) +
   geom_violin(data = bioclim_longer_data %>% 
                 filter(taxa_treatment == "Group"), 
               aes(x = taxa_name, 
@@ -631,22 +615,18 @@ fig_5 <- ggplot(bioclim_longer_data) +
     geom = "point",
     color = "black",
     position = position_dodge(0.9),
-    size = 1.2
-  ) +
-  
+    size = 1.2) +
   geom_text(data = bioclim_clade_diff_letters,
             aes(x = taxa_name,
                 label = label),
             y = Inf,
             vjust = 1) +
-  
   geom_text(data = bioclim_ploidy_diff_letters,
             aes(x = 1,
                 label = label),
             y = Inf,
             vjust = 1.1,
             size = 4) +
-  
   facet_grid(name ~ taxa_treatment,
              scales = "free",
              labeller = labeller(
@@ -666,6 +646,7 @@ fig_5 <- ggplot(bioclim_longer_data) +
 
 fig_5
 
+# Export figure files in publication-ready formats.
 ggsave("outputs/figures/Figure_5.pdf",
        fig_5,
        width = 7,
@@ -695,7 +676,6 @@ corrplot::corrplot(bioclim_pca_var$cos2,
 
 
 # PCA contribution
-
 bioclim_pca_summary <- bioclim_pca %>% 
   summary() %>% 
   .$importance
@@ -714,13 +694,10 @@ fig_s6_b <- fviz_pca_var(bioclim_pca,
        y = paste0("Principal Component 2 (", 
                   sprintf("%.1f",
                           100 * bioclim_pca_summary[2, 2]), "%)")) +
-  labs(color = "Contribution")  # 👈 cambia el título de la leyenda
+  labs(color = "Contribution")  
 
 
 fig_s6_b
-
-
-# PCA among genetic groups
 
 # PCA among ploidy levels
 fig_s6_c <- fviz_pca_ind(bioclim_pca, 
@@ -730,9 +707,9 @@ fig_s6_c <- fviz_pca_ind(bioclim_pca,
                          ellipse.type = "convex",
                          ellipse.alpha = 0.05, 
                          title = "",
-                         shape.ind = bioclim_data$clade_2, # forma de puntos según grupo
-                         col.ind = bioclim_data$clade_2,      # borde
-                         fill.ind = bioclim_data$clade_2,     # relleno
+                         shape.ind = bioclim_data$clade_2,
+                         col.ind = bioclim_data$clade_2,  
+                         fill.ind = bioclim_data$clade_2, 
                          mean.point.size = 5,
                          alpha.ind = 0.3) +
   theme_bw() + 
@@ -741,8 +718,8 @@ fig_s6_c <- fviz_pca_ind(bioclim_pca,
          fill = guide_legend(title="Taxa")) +
   scale_color_manual(values = ploidy_colors) +
   scale_fill_manual(values = ploidy_colors) +
-  scale_shape_manual(values = c("4x" = 22,  # cuadrado
-                                "2x" = 21)) +   # círculo
+  scale_shape_manual(values = c("4x" = 22,
+                                "2x" = 21)) +   
   theme(legend.position = "none") +
   labs(x = paste0("Principal Component 1 (",
                   sprintf("%.1f",
@@ -757,34 +734,30 @@ fig_s6_c <- fviz_pca_ind(bioclim_pca,
 fig_s6_c
 
 
-
 # PCA among genetic groups
-
 fig_s6_d <- fviz_pca_ind(bioclim_pca, 
-                         label = "var",  # mostrar etiquetas variables
+                         label = "var",  
                          geom = "point",
-                         habillage = bioclim_data$clade_5,   # colores por grupo
+                         habillage = bioclim_data$clade_5,   
                          addEllipses = TRUE,
-                         ellipse.type = "convex",  # área convex hull en vez de elipse normal
+                         ellipse.type = "convex",  
                          ellipse.alpha = 0.05,
                          title = "",
-                         shape.ind = bioclim_data$clade_5, # forma de puntos según grupo
-                         col.ind = bioclim_data$clade_5,      # borde
-                         fill.ind = bioclim_data$clade_5,     # relleno
+                         shape.ind = bioclim_data$clade_5,
+                         col.ind = bioclim_data$clade_5,  
+                         fill.ind = bioclim_data$clade_5, 
                          mean.point.size = 5,
                          alpha.ind = 0.3) +
-  scale_shape_manual(values = c("Tetraploid" = 22,  # cuadrado
-                                "Cádiz" = 21,    # círculo
+  scale_shape_manual(values = c("Tetraploid" = 22,
+                                "Cádiz" = 21,    
                                 "Doñana" = 21,
                                 "Algarve" = 21,
-                                "Hercynian" = 21
-  ))  +
+                                "Hercynian" = 21 ))  +
   scale_color_manual(values = clade_colors)   +
   scale_fill_manual(values = clade_colors)   +
   theme_bw() + 
   guides(color = guide_legend(title="Taxa"),
-         fill = guide_legend(title = "Taxa")
-  ) +
+         fill = guide_legend(title = "Taxa")) +
   theme(legend.position = "none") +
   labs(x = paste0("Principal Component 1 (",
                   sprintf("%.1f",
@@ -809,6 +782,7 @@ fig_s6 <- ggpubr::ggarrange(fig_s6_a,
 
 fig_s6
 
+# Export figure files in publication-ready formats.
 ggsave("outputs/figures/Figure_S6.pdf", 
        fig_s6,
        width = 7, 
